@@ -42,8 +42,7 @@ void ProjectSerializer::Initialize()
 {
   // Make sure to order these from oldest to newest
 
-  // FIXME: Implement this - yes it's a 0.1 project loader
-  //instances_.append(new ProjectSerializer190219);
+  instances_.append(new ProjectSerializer190219);
 
   instances_.append(new ProjectSerializer210528);
   instances_.append(new ProjectSerializer210907);

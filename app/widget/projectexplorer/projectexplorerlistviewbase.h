@@ -41,10 +41,8 @@ protected:
   /**
    * @brief Double click event override
    *
-   * Function that signals DoubleClickedView().
-   *
-   * FIXME: This code is the same as the code in ProjectExplorerTreeView. Is there a way to merge these two through
-   * subclassing?
+   * Emits DoubleClickedEmptyArea() when double-clicking empty space.
+   * Duplicated in ProjectExplorerTreeView due to separate Qt base classes (QListView vs QTreeView).
    */
   virtual void mouseDoubleClickEvent(QMouseEvent *event) override;
 

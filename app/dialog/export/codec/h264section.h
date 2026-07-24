@@ -21,9 +21,10 @@
 #ifndef H264SECTION_H
 #define H264SECTION_H
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QSlider>
 #include <QStackedWidget>
-#include <QComboBox>
 
 #include "codecsection.h"
 #include "widget/slider/floatslider.h"
@@ -119,6 +120,8 @@ private:
   H264FileSizeSection* filesize_section_;
 
   QComboBox *preset_combobox_;
+
+  QCheckBox* two_pass_checkbox_;
 };
 
 class H265Section : public H264Section

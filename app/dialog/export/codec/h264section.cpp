@@ -97,13 +97,23 @@ H264Section::H264Section(int default_crf, QWidget *parent) :
           static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
           compression_method_stack_,
           &QStackedWidget::setCurrentIndex);
+
+  row++;
+
+  two_pass_checkbox_ = new QCheckBox(tr("Two-Pass Encoding"));
+  two_pass_checkbox_->setToolTip(tr("Run the encoder twice for better bitrate distribution. "
+                                    "The first pass analyzes the video, the second pass encodes it. "
+                                    "Only available for Target Bit Rate and Target File Size modes."));
+  layout->addWidget(two_pass_checkbox_, row, 0, 1, 2);
 }
 
 void H264Section::AddOpts(EncodingParams *params)
 {
-  // FIXME: Implement two-pass
-
   CompressionMethod method = static_cast<CompressionMethod>(compression_method_stack_->currentIndex());
+
+  if (two_pass_checkbox_->isChecked() && method != kConstantRateFactor) {
+    params->set_video_option(QStringLiteral("pass"), QStringLiteral("2"));
+  }
 
   // This option is not used by the encoder (nor is anything with the ove_ prefix), it's to help us
   // identify which option was chosen when params are restored
@@ -159,14 +169,14 @@ void H264Section::SetOpts(const EncodingParams *p)
     int64_t max_rate = p->video_max_bit_rate();
 
     if (method == kTargetBitRate) {
-      // Use user-supplied values for the bit rate
       bitrate_section_->SetTargetBitRate(target_rate);
       bitrate_section_->SetMaximumBitRate(max_rate);
     } else {
-      // Calculate the bit rate from the file size divided by the sequence length in seconds (bits per second)
       filesize_section_->SetFileSize(p->video_option(QStringLiteral("ove_targetfilesize")).toLongLong());
     }
   }
+
+  two_pass_checkbox_->setChecked(p->video_option(QStringLiteral("pass")) == QStringLiteral("2"));
 }
 
 H264CRFSection::H264CRFSection(int default_crf, QWidget *parent) :

@@ -649,8 +649,19 @@ bool FFmpegEncoder::InitializeStream(AVMediaType type, AVStream** stream_ptr, AV
       }
     }
 
-    // Set custom options
+    // Set custom options (e.g. preset, crf, pass)
     {
+      QString pass_str = params().video_option(QStringLiteral("pass"));
+      if (!pass_str.isEmpty() && pass_str != QStringLiteral("0")) {
+        // TODO: Implement two-pass encoding. When pass is set, the encoder needs to:
+        //       1. First pass: set AV_CODEC_FLAG_PASS1 + write to /dev/null or temp file
+        //       2. Second pass: set AV_CODEC_FLAG_PASS2 + write to actual output
+        //       FFmpeg will create a pass log file (.log) in the working directory
+        //       automatically when the pass flag is set.
+        //       See: https://trac.ffmpeg.org/wiki/Encode/H.264#twopass
+        codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+      }
+
       for (auto i=params().video_opts().begin();i!=params().video_opts().end();i++) {
         if (!i.key().startsWith(QStringLiteral("ove_"))) {
           av_opt_set(codec_ctx->priv_data, i.key().toUtf8(), i.value().toUtf8(), AV_OPT_SEARCH_CHILDREN);
