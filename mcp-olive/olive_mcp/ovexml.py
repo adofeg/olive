@@ -273,6 +273,19 @@ class OveProject:
         self.add_node(node)
         return node
 
+    def make_text(self, text: str, position: str = "0,0", size: str = "48") -> OveNode:
+        node = OveNode(_NODE_IDS["textv3"], "Text")
+        node.add_input("tex_in")
+        node.add_input("enabled_in", "1")
+        node.add_input("text_in", text)
+        node.add_input("halign_in", "1")
+        node.add_input("valign_in", "1")
+        node.add_input("size_in", size)
+        node.add_input("color_in", "1.0,1.0,1.0,1.0")
+        node.add_input("position_in", position)
+        self.add_node(node)
+        return node
+
     def make_effect(self, effect_type: str, texture_ptr: int, params: dict[str, str] | None = None) -> OveNode:
         eid = _NODE_IDS.get(effect_type, effect_type)
         node = OveNode(eid)

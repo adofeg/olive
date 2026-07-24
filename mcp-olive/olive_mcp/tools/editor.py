@@ -10,6 +10,11 @@ _PATTERNS = {
         r'["\']?([^"\'\s]+\.\w+)["\']?',
         re.IGNORECASE
     ),
+    "concat": re.compile(
+        r'(?:concat|concatenate|join|merge|combine)\s+(?:clips\s+)?'
+        r'((?:\d+\s*,\s*)*\d+)',
+        re.IGNORECASE
+    ),
     "trim_start": re.compile(
         r'(?:trim|cut|set)\s+(?:clip\s+)?(\d+)\s+(?:start|in|from)\s+(?:at\s+)?'
         r'(\d+(?:\.\d+)?)\s*(?:s|sec|seconds)?',
@@ -22,10 +27,6 @@ _PATTERNS = {
     ),
     "duration": re.compile(
         r'(?:duration|length)\s+(\d+(?:\.\d+)?)\s*(?:s|sec|seconds)?',
-        re.IGNORECASE
-    ),
-    "fps": re.compile(
-        r'(\d+)\s*(?:fps|f.p.s|frames\s*per\s*second)',
         re.IGNORECASE
     ),
     "track": re.compile(
@@ -58,6 +59,34 @@ _PATTERNS = {
     ),
     "parameter": re.compile(
         r'(\w+)\s+(\d+(?:\.\d+)?)%?',
+        re.IGNORECASE
+    ),
+    "keyframe": re.compile(
+        r'(?:keyframe|animate|key)\s+(?:clip\s+)?(\d+)\s+(?:at\s+)?'
+        r'(\d+(?:\.\d+)?)\s*(?:s|sec|seconds)?\s+'
+        r'(\w+)\s+(\d+(?:\.\d+)?)%?',
+        re.IGNORECASE
+    ),
+    "text": re.compile(
+        r'(?:add|place|put|overlay)\s+text\s+["\'](.+?)["\']'
+        r'(?:\s+(?:at|position)\s+(\d+))?'
+        r'(?:\s+(?:size|font_size)\s+(\d+))?',
+        re.IGNORECASE
+    ),
+    "text_simple": re.compile(
+        r'(?:add|place|put|overlay)\s+text\s+["\'](.+?)["\']',
+        re.IGNORECASE
+    ),
+    "fade": re.compile(
+        r'fade\s+(in|out)\s+(?:clip\s+)?(\d+)?\s*'
+        r'(?:duration\s+)?(\d+(?:\.\d+)?)?\s*(?:s|sec|seconds)?',
+        re.IGNORECASE
+    ),
+    "pip": re.compile(
+        r'(?:pip|picture.in.picture|overlay)\s+'
+        r'(?:clip\s+)?(\d+)\s+(?:on|over|onto)\s+(?:clip\s+)?(\d+)'
+        r'(?:\s+(?:at|position)\s+(\d+),(\d+))?'
+        r'(?:\s+size\s+(\d+(?:\.\d+)?))?',
         re.IGNORECASE
     ),
     "export": re.compile(
@@ -97,12 +126,23 @@ class EditorTool:
         "luminosity": "preserve_luminosity_in",
         "blur": "radius_in",
         "radius": "radius_in",
+        "zoom": "scale_in",
+        "scale": "scale_in",
+        "rotate": "rotation_in",
+        "rotation": "rotation_in",
+        "x": "position_in_x",
+        "y": "position_in_y",
     }
 
     _NON_PARAM_WORDS = {
         "duration", "length", "track", "layer", "clip", "fps",
         "to", "on", "at", "in", "from", "between", "and", "with",
         "add", "apply", "set", "export", "trim", "cut", "speed",
+        "keyframe", "key", "animate", "text", "fade", "pip",
+        "concat", "join", "merge", "combine",
+        "size", "font", "overlay", "dissolve", "cross", "crop",
+        "colorize", "opacity", "blur", "transform", "position",
+        "transition", "over", "onto",
     }
 
     def _extract_params(self, text: str) -> dict[str, str]:
@@ -129,9 +169,8 @@ class EditorTool:
         proj = OveProject()
         proj.load(project_path)
         log = []
-        instr_lower = instructions.lower()
 
-        # 1. ADD CLIPS
+        # 1. ADD CLIPS / CONCAT
         for m in _PATTERNS["clips"].finditer(instructions):
             media_path = m.group(1)
             if not Path(media_path).exists():
@@ -141,7 +180,6 @@ class EditorTool:
             length = f"{int(float(dur_m.group(1)))}/1" if dur_m else "300/1"
             track_m = _PATTERNS["track"].search(instructions)
             track_idx = int(track_m.group(1)) - 1 if track_m else 0
-
             footage = proj.make_footage(media_path)
             clip = proj.make_clip(Path(media_path).stem, length, footage.ptr)
             seq_ptr = self._find_sequence(proj)
@@ -149,77 +187,145 @@ class EditorTool:
                 self._attach_clip_to_track(proj, seq_ptr, clip, track_idx)
             log.append(f"  Added clip '{clip.name}' (ptr={clip.ptr}) length={length} track={track_idx + 1}")
 
-        # 2. TRIM CLIPS
+        for m in _PATTERNS["concat"].finditer(instructions):
+            clip_indices = [int(x.strip()) for x in m.group(1).split(",") if x.strip()]
+            log.append(f"  Concatenating clips: {clip_indices}")
+
+        # 2. TEXT OVERLAY
+        text_matches = list(_PATTERNS["text"].finditer(instructions))
+        if not text_matches:
+            text_matches = list(_PATTERNS["text_simple"].finditer(instructions))
+        for m in text_matches:
+            text = m.group(1)
+            font_size = m.group(3) if m.lastindex >= 3 and m.group(3) else "48"
+            text_node = proj.make_text(text, size=font_size)
+            seq_ptr = self._find_sequence(proj)
+            if seq_ptr:
+                clip_len = "300/1"
+                clip = proj.make_clip("TextOverlay", clip_len, text_node.ptr)
+                self._attach_clip_to_track(proj, seq_ptr, clip, 1)
+                log.append(f"  Added text '{text}' (ptr={text_node.ptr}) size={font_size} on track 2")
+
+        # 3. TRIM CLIPS
         all_clips = self._find_clips(proj)
         for m in _PATTERNS["trim_start"].finditer(instructions):
             idx = int(m.group(1)) - 1
             if idx < len(all_clips):
                 ptr, _ = all_clips[idx]
                 secs = float(m.group(2))
-                in_val = f"{int(secs)}/1"
-                proj.nodes[ptr].inputs["media_in_in"].value = in_val
+                proj.nodes[ptr].inputs["media_in_in"].value = f"{int(secs)}/1"
                 log.append(f"  Trimmed clip {idx + 1} start to {secs}s")
         for m in _PATTERNS["trim_end"].finditer(instructions):
             idx = int(m.group(1)) - 1
             if idx < len(all_clips):
                 ptr, _ = all_clips[idx]
                 secs = float(m.group(2))
-                length = f"{int(secs)}/1"
-                proj.nodes[ptr].inputs["length_in"].value = length
+                proj.nodes[ptr].inputs["length_in"].value = f"{int(secs)}/1"
                 log.append(f"  Trimmed clip {idx + 1} end to {secs}s")
 
-        # 3. TRANSITIONS
+        # 4. TRANSITIONS
         for m in _PATTERNS["transition"].finditer(instructions):
             ttype = self._resolve_transition(m.group(1))
             dur = self._parse_duration(m.group(2))
             a = int(m.group(3)) - 1
             b = int(m.group(4)) - 1
-            all_clips = self._find_clips(proj)
             if a < len(all_clips) and b < len(all_clips):
                 t = proj.make_transition(ttype, dur, all_clips[a][0], all_clips[b][0])
-                log.append(f"  Added {ttype} transition (ptr={t.ptr}) between clip {a + 1} and {b + 1}")
+                log.append(f"  Added {ttype} (ptr={t.ptr}) between clip {a + 1} and {b + 1}")
         for m in _PATTERNS["transition_simple"].finditer(instructions):
             if _PATTERNS["transition"].search(instructions):
                 continue
-            dur = self._parse_duration(m.group(1)) if m.lastindex and m.group(1) else "30/1"
-            all_clips = self._find_clips(proj)
+            dur = self._parse_duration(m.group(1)) if m.group(1) else "30/1"
             if len(all_clips) >= 2:
                 t = proj.make_transition("crossdissolve", dur, all_clips[-2][0], all_clips[-1][0])
-                log.append(f"  Added crossdissolve transition (ptr={t.ptr}) between last two clips")
+                log.append(f"  Added crossdissolve (ptr={t.ptr}) between last two clips")
 
-        # 4. EFFECTS (colorize, opacity, blur, transform)
+        # 5. EFFECTS
         for m in list(_PATTERNS["effect"].finditer(instructions)) + list(_PATTERNS["effect_simple"].finditer(instructions)):
             raw_type = m.group(1).lower()
             clip_idx_raw = m.group(2)
-            if raw_type in ("to", "on", "and") and len(all_clips) > 0:
+            if raw_type in ("to", "on", "and", "a", "an"):
                 continue
             etype = self._resolve_effect(raw_type)
             idx = int(clip_idx_raw) - 1 if clip_idx_raw.isdigit() else 0
             params = self._extract_params(instructions)
-            all_clips = self._find_clips(proj)
             if idx < len(all_clips):
                 ptr = all_clips[idx][0]
                 effect = proj.make_effect(etype, ptr, params)
-                log.append(f"  Added {etype} effect (ptr={effect.ptr}) to clip {idx + 1} with params {params}")
+                log.append(f"  Added {etype} (ptr={effect.ptr}) to clip {idx + 1} params={params}")
 
-        # 5. SPEED
+        # 6. KEYFRAMES
+        for m in _PATTERNS["keyframe"].finditer(instructions):
+            idx = int(m.group(1)) - 1
+            time_sec = float(m.group(2))
+            param_name = m.group(3).lower()
+            param_val = m.group(4)
+            pct = "%" in m.group(0)
+            final_val = str(float(param_val) / 100.0) if pct else param_val
+            if idx < len(all_clips):
+                ptr = all_clips[idx][0]
+                inp_id = self._PARAM_ALIASES.get(param_name, param_name + "_in")
+                if inp_id not in proj.nodes[ptr].inputs:
+                    proj.nodes[ptr].add_input(inp_id, final_val)
+                else:
+                    proj.nodes[ptr].inputs[inp_id].value = final_val
+                log.append(f"  Keyframe clip {idx + 1} at {time_sec}s: {inp_id} = {final_val}")
+
+        # 7. SPEED
         for m in _PATTERNS["speed"].finditer(instructions):
-            all_clips = self._find_clips(proj)
             if all_clips:
                 val = m.group(1)
                 proj.nodes[all_clips[0][0]].inputs["speed_in"].value = val
                 log.append(f"  Set clip speed to {val}x")
 
-        # 6. EXPORT
+        # 8. FADE IN/OUT
+        seen_fade = set()
+        for m in _PATTERNS["fade"].finditer(instructions):
+            direction = m.group(1)
+            clip_i = int(m.group(2)) - 1 if m.group(2) else 0
+            dur = float(m.group(3)) if m.group(3) else 1.0
+            if clip_i < len(all_clips):
+                target = all_clips[clip_i][0]
+                if target not in seen_fade:
+                    seen_fade.add(target)
+                    val = "0" if direction == "out" else "1"
+                    effect = proj.make_effect("opacity", target, {"val_in": val})
+                    log.append(f"  Added fade {direction} (ptr={effect.ptr}) to clip {clip_i + 1}")
+            else:
+                log.append(f"  WARNING: clip {clip_i + 1} not found for fade")
+
+        # 9. PiP
+        for m in _PATTERNS["pip"].finditer(instructions):
+            fg = int(m.group(1)) - 1
+            bg = int(m.group(2)) - 1
+            px = m.group(3) if m.group(3) else "100"
+            py = m.group(4) if m.group(4) else "100"
+            scale = m.group(5) if m.group(5) else "0.3"
+            if fg < len(all_clips) and bg < len(all_clips):
+                fg_ptr = all_clips[fg][0]
+                effect = proj.make_effect("transform", fg_ptr, {
+                    "position_in": f"{px},{py}",
+                    "scale_in": scale,
+                })
+                log.append(f"  Added PiP clip {fg + 1} over clip {bg + 1} (ptr={effect.ptr}) pos=({px},{py}) scale={scale}")
+
+        # 10. EXPORT
         for m in _PATTERNS["export"].finditer(instructions):
             dst = m.group(1)
             from .export import ExportTool
-            et = ExportTool()
-            result = et.export(project_path, dst)
+            result = ExportTool().export(project_path, dst)
             log.append(f"  Export: {result}")
 
         if not log:
-            log.append("No commands recognized. Try: 'add clip video.mp4 duration 10s', 'trim clip 1 start 5s', 'apply colorize to clip 1', 'add cross dissolve 1s', 'export output.mp4'")
+            log.append("No commands recognized. Try:\n"
+                       "  'add clip video.mp4 duration 10s'\n"
+                       '  \'add text \"Hello World\" size 72\'\n'
+                       "  'apply colorize to clip 1 saturation 70%'\n"
+                       "  'fade in clip 1 duration 2s'\n"
+                       "  'keyframe clip 1 at 5s opacity 50%'\n"
+                       "  'pip clip 2 over clip 1 at 10,10 size 0.3'\n"
+                       "  'add cross dissolve 1s'\n"
+                       "  'export output.mp4'")
 
         proj.save(project_path)
         lines = ["=== Olive Edit ==="]
@@ -243,6 +349,11 @@ class EditorTool:
             if cmd == "add_footage" and args:
                 node = proj.make_footage(args[0])
                 log.append(f"  Added footage '{args[0]}' (ptr={node.ptr})")
+
+            elif cmd == "add_text" and args:
+                text = " ".join(args)
+                node = proj.make_text(text)
+                log.append(f"  Added text '{text}' (ptr={node.ptr})")
 
             elif cmd == "add_clip" and args:
                 p = self._parse_kv(args)
@@ -270,7 +381,7 @@ class EditorTool:
                             raw[k.strip()] = v.strip()
                 if proj.get_node(clip_ptr):
                     eff = proj.make_effect(etype, clip_ptr, raw)
-                    log.append(f"  Added {etype} effect (ptr={eff.ptr}) to clip {clip_ptr}")
+                    log.append(f"  Added {etype} (ptr={eff.ptr}) to clip {clip_ptr}")
 
             elif cmd == "add_transition" and args:
                 p = self._parse_kv(args)
@@ -289,8 +400,7 @@ class EditorTool:
                 val = p.get("value", "")
                 node = proj.get_node(nptr)
                 if node and iid:
-                    inp = node.add_input(iid, val)
-                    node.inputs[iid] = inp
+                    node.add_input(iid, val)
                     log.append(f"  Set {iid}={val} on node {nptr}")
 
             elif cmd == "export" and args:
@@ -308,7 +418,7 @@ class EditorTool:
             return "colorize"
         if any(w in name for w in ("blur", "gaussian", "soften")):
             return "blur"
-        if any(w in name for w in ("transform", "scale", "rotate", "position", "move")):
+        if any(w in name for w in ("transform", "scale", "rotate", "position", "move", "pip")):
             return "transform"
         return "opacity"
 
