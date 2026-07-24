@@ -191,10 +191,11 @@ void TimeRuler::drawForeground(QPainter *p, const QRectF &rect)
   int last_short_unit = -1;
   int last_text_draw = INT_MIN;
 
-  // FIXME: Hardcoded number
-  const int kAverageTextWidth = 200;
+  const int kTimecodePadding = 80;
 
-  for (int i=GetScroll()-kAverageTextWidth;i<GetScroll()+width()+kAverageTextWidth;i++) {
+  int text_width = QtUtils::QFontMetricsWidth(fm, QStringLiteral("00:00:00.000"));
+  int average_text_width = text_width + kTimecodePadding;
+  for (int i=GetScroll()-average_text_width;i<GetScroll()+width()+average_text_width;i++) {
     double screen_pt = static_cast<double>(i);
 
     if (long_interval > -1) {
@@ -210,15 +211,14 @@ void TimeRuler::drawForeground(QPainter *p, const QRectF &rect)
           int timecode_left;
 
           if (centered_text_) {
-            text_rect = QRect(i - kAverageTextWidth/2, marker_height, kAverageTextWidth, fm.height());
+            text_rect = QRect(i - text_width/2, marker_height, text_width, fm.height());
             text_align = Qt::AlignCenter;
             timecode_left = i - timecode_width/2;
           } else {
-            text_rect = QRect(i, marker_height, kAverageTextWidth, fm.height());
+            text_rect = QRect(i, marker_height, text_width + kTimecodePadding, fm.height());
             text_align = Qt::AlignLeft | Qt::AlignVCenter;
             timecode_left = i;
 
-            // Add gap to left between line and text
             timecode_str.prepend(' ');
           }
 
@@ -251,13 +251,13 @@ void TimeRuler::drawForeground(QPainter *p, const QRectF &rect)
 
   // If cache status is enabled
   if (show_cache_status_ && playback_cache_ && playback_cache_->HasValidatedRanges()) {
-    // FIXME: Hardcoded to get video length, if we ever need audio length, this will have to change
     int h = PlaybackCache::GetCacheIndicatorHeight();
     QRect cache_rect(0, height() - h, width(), h);
 
     if (ViewerOutput *viewer = dynamic_cast<ViewerOutput*>(playback_cache_->parent())) {
       int right = TimeToScene(viewer->GetVideoLength());
-      cache_rect.setWidth(std::max(0, right));
+      int audio_right = TimeToScene(viewer->GetAudioLength());
+      cache_rect.setWidth(std::max(0, std::max(right, audio_right)));
     }
 
     if (cache_rect.width() > 0) {

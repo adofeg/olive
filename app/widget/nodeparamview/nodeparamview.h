@@ -39,6 +39,8 @@ class NodeParamView : public TimeBasedWidget
 {
   Q_OBJECT
 public:
+  static constexpr double kDefaultParamViewScale = 120.0;
+
   NodeParamView(bool create_keyframe_view, QWidget* parent = nullptr);
   NodeParamView(QWidget* parent = nullptr) :
     NodeParamView(true, parent)

@@ -130,13 +130,12 @@ class OveArrayInput:
         ET.SubElement(primary, "keyframing").text = "0"
         std = ET.SubElement(primary, "standard")
         ET.SubElement(std, "track")
-        if self.count > 0:
-            subs = ET.SubElement(inp, "subelements", count=str(self.count))
-            for _ in range(self.count):
-                el = ET.SubElement(subs, "element")
-                ET.SubElement(el, "keyframing").text = "0"
-                s = ET.SubElement(el, "standard")
-                ET.SubElement(s, "track")
+        subs = ET.SubElement(inp, "subelements", count=str(self.count))
+        for _ in range(self.count):
+            el = ET.SubElement(subs, "element")
+            ET.SubElement(el, "keyframing").text = "0"
+            s = ET.SubElement(el, "standard")
+            ET.SubElement(s, "track")
         return inp
 
 

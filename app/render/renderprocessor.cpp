@@ -339,8 +339,11 @@ void RenderProcessor::ProcessVideoFootage(TexturePtr destination, const FootageJ
   QString using_colorspace = stream_data.colorspace();
 
   if (using_colorspace.isEmpty()) {
-    // FIXME:
-    qWarning() << "HAVEN'T GOTTEN DEFAULT INPUT COLORSPACE";
+    using_colorspace = color_manager->GetDefaultInputColorSpace();
+    if (using_colorspace.isEmpty()) {
+      qWarning() << "No input colorspace available, using sRGB as fallback";
+      using_colorspace = QStringLiteral("sRGB");
+    }
   }
 
   Decoder::CodecStream default_codec_stream(stream->filename(), stream_data.stream_index(), GetCurrentBlock());

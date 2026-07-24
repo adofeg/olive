@@ -143,8 +143,7 @@ NodeParamView::NodeParamView(bool create_keyframe_view, QWidget *parent) :
     keyframe_view_ = nullptr;
   }
 
-  // Set a default scale - FIXME: Hardcoded
-  SetScale(120);
+  SetScale(kDefaultParamViewScale);
 
   // Pickup on widget focus changes
   // DISABLED - we now just handle this with item/titlebar clicking (see ToggleSelect)
