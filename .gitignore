@@ -98,3 +98,8 @@ compile_flags.txt
 *creator.user*
 
 *_qmlcache.qrc
+
+# Environment files (secrets, local overrides)
+.env
+.env.*
+!.env.example

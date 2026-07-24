@@ -37,9 +37,13 @@ class ExportTool:
 
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        project_xml = self._ensure_uncompressed(str(src))
-        if project_xml and sequence_name:
-            self._set_active_sequence(project_xml, sequence_name)
+        project_xml, needs_cleanup = self._ensure_uncompressed(str(src))
+        try:
+            if project_xml and sequence_name:
+                self._set_active_sequence(project_xml, sequence_name)
+        finally:
+            if needs_cleanup and project_xml:
+                Path(project_xml).unlink(missing_ok=True)
 
         cmd = [
             self.olive_binary,
@@ -70,14 +74,12 @@ class ExportTool:
         except Exception as e:
             return f"Export error: {e}"
 
-    def _ensure_uncompressed(self, project_path: str) -> str | None:
+    def _ensure_uncompressed(self, project_path: str):
         src = Path(project_path)
         if src.suffix == ".ovexml":
-            return str(src)
+            return str(src), False
         if src.suffix == ".ove":
             try:
-                import gzip
-                uncompressed = src.with_suffix(".ovexml")
                 with open(src, "rb") as f:
                     magic = f.read(4)
                     f.seek(0)
@@ -85,12 +87,14 @@ class ExportTool:
                         import zlib
                         compressed = f.read()
                         data = zlib.decompress(compressed[4:])
-                        with open(uncompressed, "wb") as out:
-                            out.write(data)
-                        return str(uncompressed)
+                        import tempfile
+                        tmp = tempfile.NamedTemporaryFile(suffix=".ovexml", delete=False)
+                        tmp.write(data)
+                        tmp.close()
+                        return tmp.name, True
             except Exception:
                 pass
-        return None
+        return None, False
 
     def _set_active_sequence(self, project_path: str, sequence_name: str):
         try:

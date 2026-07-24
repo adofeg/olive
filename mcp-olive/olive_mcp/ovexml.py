@@ -2,7 +2,7 @@ import copy
 import uuid
 from pathlib import Path
 from xml.etree import ElementTree as ET
-from xml.dom import minidom
+
 
 
 _NODE_IDS = {
@@ -326,8 +326,22 @@ class OveProject:
 
     def to_string(self) -> str:
         rough = ET.tostring(self.to_xml(), encoding="unicode")
-        reparsed = minidom.parseString(rough.encode())
-        return reparsed.toprettyxml(indent="  ", encoding="utf-8").decode("utf-8")
+        return self._indent_xml(rough)
+
+    @staticmethod
+    def _indent_xml(xml_str: str) -> str:
+        lines = []
+        indent = 0
+        for line in xml_str.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("</"):
+                indent -= 1
+            lines.append("  " * indent + line)
+            if line.startswith("<") and not line.startswith("</") and not line.endswith("/>"):
+                indent += 1
+        return "\n".join(lines)
 
     def save(self, path: str):
         with open(path, "w", encoding="utf-8") as f:

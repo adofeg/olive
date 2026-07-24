@@ -1,11 +1,7 @@
-import copy
-import uuid
 from datetime import datetime
 from pathlib import Path
-from xml.etree import ElementTree
-from xml.dom import minidom
 
-from ..ovexml import OveProject, OveNode
+from ..ovexml import OveProject
 
 
 class ProjectTool:
@@ -82,15 +78,8 @@ class ProjectTool:
 
             return "\n".join(lines)
 
-        except ElementTree.ParseError as e:
-            return f"Failed to parse project XML: {e}"
         except Exception as e:
             return f"Error reading project: {e}"
-
-    def _make_xml_pretty(self, elem: ElementTree.Element) -> str:
-        rough = ElementTree.tostring(elem, encoding="unicode")
-        reparsed = minidom.parseString(rough.encode())
-        return reparsed.toprettyxml(indent="  ", encoding="utf-8").decode("utf-8")
 
     def create_project(
         self,
@@ -150,39 +139,22 @@ class ProjectTool:
             return f"Media not found: {media}"
 
         try:
-            tree = ElementTree.parse(str(src))
-            root = tree.getroot()
-        except Exception as e:
-            return f"Failed to parse project: {e}"
-
-        try:
-            footage = ElementTree.SubElement(root, "node",
-                id="org.olivevideoeditor.Olive.footage",
-                name=media.stem)
-            ElementTree.SubElement(footage, "uuid").text = str(uuid.uuid4())
-            ElementTree.SubElement(footage, "uuid").text = str(uuid.uuid4())
-            ElementTree.SubElement(footage, "position", x="0", y="0")
-            ElementTree.SubElement(footage, "locked", flags="0")
-
-            filename = ElementTree.SubElement(footage, "input", id="filename")
-            ElementTree.SubElement(filename, "standard_value").text = str(media)
-
-            vp = ElementTree.SubElement(footage, "input", id="video_params")
-            ElementTree.SubElement(vp, "standard_value",
-                width="0", height="0", format="0",
-                pixel_aspect_ratio="1", interlacing="0", divider="0",
-                frame_rate_numerator="0", frame_rate_denominator="0",
-                color_range="0")
-
-            ap = ElementTree.SubElement(footage, "input", id="audio_params")
-            ElementTree.SubElement(ap, "standard_value",
-                sample_rate="0", channel_layout="0", format="0")
-
-            xml_content = self._make_xml_pretty(root)
-            with open(src, "w", encoding="utf-8") as f:
-                f.write(xml_content)
-
-            return f"Added footage: {media.name}\n  Project: {src}"
-
+            proj = OveProject()
+            proj.load(str(src))
+            footage = proj.make_footage(str(media))
+            seq_ptr = self._find_sequence(proj)
+            if seq_ptr is not None:
+                from .editor import EditorTool
+                et = EditorTool()
+                clip = proj.make_clip(media.stem, "300/1", footage.ptr)
+                et._attach_clip_to_track(proj, seq_ptr, clip, track_index)
+            proj.save(str(src))
+            return f"Added footage: {media.name} (ptr={footage.ptr})\n  Project: {src}"
         except Exception as e:
             return f"Error adding clip: {e}"
+
+    def _find_sequence(self, proj: OveProject) -> int | None:
+        for ptr, n in proj.nodes.items():
+            if "sequence" in n.node_id:
+                return ptr
+        return None
