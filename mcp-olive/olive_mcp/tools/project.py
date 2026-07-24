@@ -1,8 +1,11 @@
+import copy
 import uuid
 from datetime import datetime
 from pathlib import Path
 from xml.etree import ElementTree
 from xml.dom import minidom
+
+from ..ovexml import OveProject, OveNode
 
 
 class ProjectTool:
@@ -12,45 +15,70 @@ class ProjectTool:
             return f"Project file not found: {src}"
 
         try:
-            tree = ElementTree.parse(str(src))
-            root = tree.getroot()
+            proj = OveProject()
+            proj.load(str(src))
 
             lines = [f"Project: {src.name}", f"Path: {src}", ""]
 
             sequences = []
             footage_list = []
-            for node in root.findall(".//node"):
-                node_id = node.get("id", "")
-                name = node.get("name", "(unnamed)")
+            clips = []
+            tracks = []
+            effects = []
 
-                if "sequence" in node_id or "Sequence" in name:
-                    seq_info = [f"  Sequence: {name}"]
-                    video_params = node.find(".//input[@id='video_params']")
-                    if video_params is not None:
-                        for sv in video_params.findall("standard_value"):
-                            w = sv.get("width", "?")
-                            h = sv.get("height", "?")
-                            seq_info.append(f"    Resolution: {w}x{h}")
-                            break
+            for ptr, node in proj.nodes.items():
+                name = node.name or "(unnamed)"
+
+                if "sequence" in node.node_id:
+                    seq_info = [f"  Sequence: {name} (ptr={ptr})"]
+                    vp = node.inputs.get("video_params")
+                    w = getattr(vp, 'value', "")
+                    h = getattr(vp, 'value', "")
+                    for c in node.connections:
+                        if c.input_id == "tex_in":
+                            target = proj.get_node(c.target_ptr)
+                            if target:
+                                seq_info.append(f"    Track: {target.name or 'unnamed'} (ptr={target.ptr})")
                     sequences.append("\n".join(seq_info))
 
-                elif "footage" in node_id or "Footage" in node_id:
-                    filename = ""
-                    for child in node.iter():
-                        if child.text and ("/" in child.text or "\\" in child.text):
-                            filename = child.text
-                            break
-                    footage_list.append(f"  Footage: {name} ({filename})")
+                elif "footage" in node.node_id:
+                    fn = ""
+                    fn_inp = node.inputs.get("filename")
+                    if fn_inp:
+                        fn = fn_inp.value
+                    footage_list.append(f"  Footage: {name} (ptr={ptr}) file={fn}")
+
+                elif "clip" in node.node_id:
+                    length = node.inputs.get("length_in")
+                    lv = length.value if length else "?"
+                    media_in = node.inputs.get("media_in_in")
+                    mv = media_in.value if media_in else "0/1"
+                    speed = node.inputs.get("speed_in")
+                    sv = speed.value if speed else "1"
+                    clips.append(f"  Clip: {name} (ptr={ptr}) length={lv} media_in={mv} speed={sv}")
+
+                elif "track" in node.node_id:
+                    tracks.append(f"  Track: {name or 'unnamed'} (ptr={ptr})")
+
+                elif "opacity" in node.node_id or "colorize" in node.node_id:
+                    effects.append(f"  Effect: {node.node_id.split('.')[-1]} (ptr={ptr})")
 
             lines.append(f"Sequences ({len(sequences)}):")
             lines.extend(sequences if sequences else ["  (none)"])
-
+            lines.append("")
+            lines.append(f"Tracks ({len(tracks)}):")
+            lines.extend(tracks if tracks else ["  (none)"])
+            lines.append("")
+            lines.append(f"Clips ({len(clips)}):")
+            lines.extend(clips if clips else ["  (none)"])
             lines.append("")
             lines.append(f"Footage ({len(footage_list)}):")
             lines.extend(footage_list if footage_list else ["  (none)"])
-
             lines.append("")
-            lines.append(f"Total nodes: {len(root.findall('.//node'))}")
+            lines.append(f"Effects ({len(effects)}):")
+            lines.extend(effects if effects else ["  (none)"])
+            lines.append("")
+            lines.append(f"Total nodes: {len(proj.nodes)}")
 
             return "\n".join(lines)
 
@@ -72,54 +100,39 @@ class ProjectTool:
         fps_numerator: int = 30,
         fps_denominator: int = 1,
         sequence_name: str = "Sequence 1",
+        media_files: list[str] | None = None,
     ) -> str:
         dst = Path(output_path).resolve()
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        root = ElementTree.Element("project", version="230220")
+        proj = OveProject()
+        seq = proj.make_sequence(sequence_name, width, height, fps_numerator, fps_denominator)
+        track = proj.make_track("V1")
+        seq.connect("tex_in", track.ptr, element=0)
+        tex_arr = seq.inputs.get("tex_in")
+        if tex_arr and hasattr(tex_arr, 'count'):
+            tex_arr.count = 1
 
-        project_uuid = str(uuid.uuid4())
-        ElementTree.SubElement(root, "uuid").text = project_uuid
-        ElementTree.SubElement(root, "name").text = dst.stem
-        ElementTree.SubElement(root, "color_config", filename="")
-        ElementTree.SubElement(root, "color_reference_space").text = "aces 1.0 sdr video"
+        log = []
+        if media_files:
+            for i, mf in enumerate(media_files):
+                mp = Path(mf)
+                if mp.exists():
+                    footage = proj.make_footage(str(mp.resolve()))
+                    clip = proj.make_clip(mp.stem, "300/1", footage.ptr)
+                    gap = proj.make_gap("300/1")
+                    track.inputs["block_in"].count = (i * 2) + 2
+                    track.connect("block_in", gap.ptr, element=i * 2)
+                    track.connect("block_in", clip.ptr, element=i * 2 + 1)
+                    log.append(f"  Added clip: {mp.name} (ptr={clip.ptr})")
 
-        folder = ElementTree.SubElement(root, "node", id="org.olivevideoeditor.Olive.folder", name="Root")
-        ElementTree.SubElement(folder, "uuid").text = str(uuid.uuid4())
-        ElementTree.SubElement(folder, "uuid").text = str(uuid.uuid4())
-        ElementTree.SubElement(folder, "position", x="0", y="0")
-        ElementTree.SubElement(folder, "locked", flags="0")
-
-        seq_uuid = str(uuid.uuid4())
-        seq = ElementTree.SubElement(root, "node", id="org.olivevideoeditor.Olive.sequence", name=sequence_name)
-        ElementTree.SubElement(seq, "uuid").text = seq_uuid
-        ElementTree.SubElement(seq, "uuid").text = str(uuid.uuid4())
-        ElementTree.SubElement(seq, "position", x="0", y="0")
-        ElementTree.SubElement(seq, "locked", flags="0")
-
-        vp = ElementTree.SubElement(seq, "input", id="video_params")
-        sv = ElementTree.SubElement(vp, "standard_value")
-        sv.set("width", str(width))
-        sv.set("height", str(height))
-        sv.set("format", "0")
-        sv.set("pixel_aspect_ratio", "1")
-        sv.set("interlacing", "0")
-        sv.set("divider", "0")
-        sv.set("frame_rate_numerator", str(fps_numerator))
-        sv.set("frame_rate_denominator", str(fps_denominator))
-        sv.set("color_range", "0")
-
-        ap = ElementTree.SubElement(seq, "input", id="audio_params")
-        sv2 = ElementTree.SubElement(ap, "standard_value")
-        sv2.set("sample_rate", "48000")
-        sv2.set("channel_layout", "3")
-        sv2.set("format", "1")
-
-        xml_content = self._make_xml_pretty(root)
-        with open(dst, "w", encoding="utf-8") as f:
-            f.write(xml_content)
-
-        return f"Project created: {dst}\n  Resolution: {width}x{height}\n  FPS: {fps_numerator}/{fps_denominator}\n  Sequence: {sequence_name}"
+        proj.save(str(dst))
+        lines = [f"Project created: {dst}",
+                 f"  Resolution: {width}x{height}",
+                 f"  FPS: {fps_numerator}/{fps_denominator}",
+                 f"  Sequence: {sequence_name}"]
+        lines.extend(log)
+        return "\n".join(lines)
 
     def add_clip(
         self,
