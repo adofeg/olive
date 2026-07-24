@@ -93,6 +93,16 @@ public:
       startup_project_ = p;
     }
 
+    const QString& export_filename() const
+    {
+      return export_filename_;
+    }
+
+    void set_export_filename(const QString& f)
+    {
+      export_filename_ = f;
+    }
+
     const QString& startup_language() const
     {
       return startup_language_;
@@ -117,6 +127,8 @@ public:
     RunMode mode_;
 
     QString startup_project_;
+
+    QString export_filename_;
 
     QString startup_language_;
 

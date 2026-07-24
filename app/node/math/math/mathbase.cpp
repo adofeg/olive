@@ -561,6 +561,41 @@ QVector<int> MathNodeBase::PairingCalculator::GetPairLikelihood(const NodeValueT
   return likelihood;
 }
 
+MathNodeBase::Pairing MathNodeBase::PairingCalculator::Resolve(NodeValue::Type type_a, NodeValue::Type type_b)
+{
+  int idx_a = -1, idx_b = -1;
+
+  if (NodeValue::type_is_vector(type_a)) {
+    if (NodeValue::type_is_vector(type_b)) return kPairVecVec;
+    if (NodeValue::type_is_numeric(type_b)) return kPairVecNumber;
+    if (type_b == NodeValue::kMatrix) return kPairMatrixVec;
+  } else if (type_a == NodeValue::kMatrix) {
+    if (type_b == NodeValue::kMatrix) return kPairMatrixMatrix;
+    if (NodeValue::type_is_vector(type_b)) return kPairMatrixVec;
+    if (type_b == NodeValue::kTexture) return kPairTextureMatrix;
+  } else if (type_a == NodeValue::kColor) {
+    if (type_b == NodeValue::kColor) return kPairColorColor;
+    if (NodeValue::type_is_numeric(type_b)) return kPairNumberColor;
+    if (type_b == NodeValue::kTexture) return kPairTextureColor;
+  } else if (NodeValue::type_is_numeric(type_a)) {
+    if (NodeValue::type_is_numeric(type_b)) return kPairNumberNumber;
+    if (type_b == NodeValue::kColor) return kPairNumberColor;
+    if (NodeValue::type_is_vector(type_b)) return kPairVecNumber;
+    if (type_b == NodeValue::kTexture) return kPairTextureNumber;
+    if (type_b == NodeValue::kSamples) return kPairSampleNumber;
+  } else if (type_a == NodeValue::kSamples) {
+    if (type_b == NodeValue::kSamples) return kPairSampleSample;
+    if (NodeValue::type_is_numeric(type_b)) return kPairSampleNumber;
+  } else if (type_a == NodeValue::kTexture) {
+    if (type_b == NodeValue::kTexture) return kPairTextureTexture;
+    if (NodeValue::type_is_numeric(type_b)) return kPairTextureNumber;
+    if (type_b == NodeValue::kColor) return kPairTextureColor;
+    if (type_b == NodeValue::kMatrix) return kPairTextureMatrix;
+  }
+
+  return kPairNone;
+}
+
 bool MathNodeBase::PairingCalculator::FoundMostLikelyPairing() const
 {
   return (most_likely_pairing_ > kPairNone && most_likely_pairing_ < kPairCount);

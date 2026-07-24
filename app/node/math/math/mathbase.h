@@ -72,6 +72,8 @@ protected:
     const NodeValue& GetMostLikelyValueA() const;
     const NodeValue& GetMostLikelyValueB() const;
 
+    static Pairing Resolve(NodeValue::Type type_a, NodeValue::Type type_b);
+
   private:
     static QVector<int> GetPairLikelihood(const NodeValueTable& table);
 

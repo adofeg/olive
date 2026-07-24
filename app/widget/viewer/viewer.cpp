@@ -132,8 +132,7 @@ ViewerWidget::ViewerWidget(ViewerDisplayWidget *display, QWidget *parent) :
   connect(controls_, &PlaybackControls::EndClicked, this, &ViewerWidget::GoToEnd);
   layout->addWidget(controls_);
 
-  // FIXME: Magic number
-  SetScale(48.0);
+  SetScale(kDefaultViewerScale);
 
   // Ensures that seeking on the waveform view updates the time as expected
   connect(waveform_view_, &AudioWaveformView::customContextMenuRequested, this, &ViewerWidget::ShowContextMenu);

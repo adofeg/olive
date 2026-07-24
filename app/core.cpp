@@ -35,6 +35,7 @@
 #endif
 
 #include "audio/audiomanager.h"
+#include "codec/encoder.h"
 #include "cli/clitask/clitaskdialog.h"
 #include "codec/conformmanager.h"
 #include "common/filefunctions.h"
@@ -54,6 +55,8 @@
 #include "node/color/colormanager/colormanager.h"
 #include "node/factory.h"
 #include "node/nodeundo.h"
+#include "node/output/track/track.h"
+#include "node/project/sequence/sequence.h"
 #include "node/project/serializer/serializer.h"
 #include "panel/panelmanager.h"
 #include "panel/project/project.h"
@@ -65,6 +68,7 @@
 #include "task/project/loadotio/loadotio.h"
 #include "task/project/saveotio/saveotio.h"
 #endif
+#include "task/export/export.h"
 #include "task/project/import/import.h"
 #include "task/project/import/importerrordialog.h"
 #include "task/project/load/load.h"
@@ -172,7 +176,9 @@ void Core::Start()
     QMetaObject::invokeMethod(this, "OpenStartupProject", Qt::QueuedConnection);
     break;
   case CoreParams::kHeadlessExport:
-    qInfo() << "Headless export is not fully implemented yet";
+    qInfo() << "Starting headless export...";
+    StartHeadlessExport();
+    QApplication::quit();
     break;
   case CoreParams::kHeadlessPreCache:
     qInfo() << "Headless pre-cache is not fully implemented yet";
@@ -618,57 +624,32 @@ bool Core::StartHeadlessExport()
   ProjectLoadTask plm(startup_project);
   CLITaskDialog task_dialog(&plm);
 
-  /*
   if (task_dialog.Run()) {
-    std::unique_ptr<Project> p = std::unique_ptr<Project>(plm.GetLoadedProject());
-    QVector<Item*> items = p->get_items_of_type(Item::kSequence);
+    Project *project = plm.GetLoadedProject();
+    if (!project) {
+      qCritical().noquote() << tr("Project failed to load: null project");
+      return false;
+    }
 
-    // Check if this project contains sequences
-    if (items.isEmpty()) {
+    // Find the first Sequence (ViewerOutput) in the project
+    Sequence *sequence = nullptr;
+    foreach (Node *n, project->nodes()) {
+      if ((sequence = dynamic_cast<Sequence*>(n))) {
+        break;
+      }
+    }
+
+    if (!sequence) {
       qCritical().noquote() << tr("Project contains no sequences, nothing to export");
       return false;
     }
 
-    Sequence* sequence = nullptr;
-
-    // Check if this project contains multiple sequences
-    if (items.size() > 1) {
-      qInfo().noquote() << tr("This project has multiple sequences. Which do you wish to export?");
-      for (int i=0;i<items.size();i++) {
-        std::cout << "[" << i << "] " << items.at(i)->GetLabel().toStdString();
-      }
-
-      QTextStream stream(stdin);
-      QString sequence_read;
-      int sequence_index = -1;
-      QString quit_code = QStringLiteral("q");
-      std::string prompt = tr("Enter number (or %1 to cancel): ").arg(quit_code).toStdString();
-      forever {
-        std::cout << prompt;
-
-        stream.readLineInto(&sequence_read);
-
-        if (!QString::compare(sequence_read, quit_code, Qt::CaseInsensitive)) {
-          return false;
-        }
-
-        bool ok;
-        sequence_index = sequence_read.toInt(&ok);
-
-        if (ok && sequence_index >= 0 && sequence_index < items.size()) {
-          break;
-        } else {
-          qCritical().noquote() << tr("Invalid sequence number");
-        }
-      }
-
-      sequence = static_cast<Sequence*>(items.at(sequence_index));
-    } else {
-      sequence = static_cast<Sequence*>(items.first());
+    EncodingParams params;
+    if (!core_params_.export_filename().isEmpty()) {
+      params.SetFilename(core_params_.export_filename());
     }
 
-    ExportParams params;
-    ExportTask export_task(sequence->viewer_output(), p->color_manager(), params);
+    ExportTask export_task(sequence, project->color_manager(), params);
     CLITaskDialog export_dialog(&export_task);
     if (export_dialog.Run()) {
       qInfo().noquote() << tr("Export succeeded");
@@ -681,7 +662,6 @@ bool Core::StartHeadlessExport()
     qCritical().noquote() << tr("Project failed to load: %1").arg(plm.GetError());
     return false;
   }
-  */
 
   return false;
 }

@@ -58,6 +58,8 @@ public:
     kWFViewerAndWaveform
   };
 
+  static constexpr double kDefaultViewerScale = 48.0;
+
   ViewerWidget(QWidget* parent = nullptr) :
     ViewerWidget(new ViewerDisplayWidget(), parent)
   {}

@@ -23,6 +23,7 @@
 
 #include <QMutex>
 #include <QObject>
+#include <QTimer>
 #include <QVariant>
 
 #include "common/define.h"
@@ -146,6 +147,7 @@ private:
 
   static const int MAX_TEXTURE_LIFE = 5000;
   static const bool USE_TEXTURE_CACHE = true;
+  static const int TEXTURE_CLEANUP_INTERVAL = 3000;
   std::list<CachedTexture> texture_cache_;
 
   QMutex color_cache_mutex_;
@@ -155,6 +157,11 @@ private:
   QVariant interlace_texture_;
 
   QMutex texture_cache_lock_;
+
+  QTimer texture_cleanup_timer_;
+
+private slots:
+  void CleanupOldTextures();
 
 };
 

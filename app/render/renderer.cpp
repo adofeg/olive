@@ -30,6 +30,7 @@ namespace olive {
 Renderer::Renderer(QObject *parent) :
   QObject(parent)
 {
+  connect(&texture_cleanup_timer_, &QTimer::timeout, this, &Renderer::CleanupOldTextures);
 }
 
 TexturePtr Renderer::CreateTexture(const VideoParams &params, const void *data, int linesize)
@@ -66,21 +67,6 @@ TexturePtr Renderer::CreateTexture(const VideoParams &params, const void *data, 
 void Renderer::DestroyTexture(Texture *texture)
 {
   if (USE_TEXTURE_CACHE) {
-    // HACK: Dirty, dirty hack. OpenGL uses "contexts" to store all of its data, and each context
-    //       can only be used by the thread that created it. However there are also "shared contexts"
-    //       where assets from one context can be used in another. We use shared contexts so that
-    //       textures rendered in the background can be displayed on the screen, travelling from
-    //       a background thread to the main UI thread. However, when that texture is destroyed, it
-    //       comes back here to be placed in the texture cache. But that leads to a race condition
-    //       because it will call the background thread's renderer in the main thread. Since all
-    //       assets are shared, we could technically just get the texture to call "destroy" in the
-    //       viewer's renderer instance, but that would mean all textures would end up stranded
-    //       there unusable by the background renderer, negating the very advantage of the texture
-    //       cache in the first place. Therefore, we simply allow the thread calling to happen, and
-    //       use mutexes to prevent race conditions.
-    //
-    //       Presumably Vulkan would not have this issue because it allows for application-wide
-    //       instances and multithreading.
     texture_cache_lock_.lock();
     texture_cache_.push_back({texture->params().effective_width(),
                               texture->params().effective_height(),
@@ -93,6 +79,10 @@ void Renderer::DestroyTexture(Texture *texture)
 
     if (QThread::currentThread() == this->thread()) {
       ClearOldTextures();
+    }
+
+    if (!texture_cleanup_timer_.isActive()) {
+      texture_cleanup_timer_.start(TEXTURE_CLEANUP_INTERVAL);
     }
   } else {
     DestroyNativeTexture(texture->id());
@@ -128,6 +118,18 @@ QVariant Renderer::GetDefaultShader()
   }
 
   return default_shader_;
+}
+
+void Renderer::CleanupOldTextures()
+{
+  if (QThread::currentThread() == this->thread()) {
+    ClearOldTextures();
+
+    QMutexLocker locker(&texture_cache_lock_);
+    if (texture_cache_.empty()) {
+      texture_cleanup_timer_.stop();
+    }
+  }
 }
 
 void Renderer::Destroy()

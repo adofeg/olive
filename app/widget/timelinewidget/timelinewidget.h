@@ -48,6 +48,8 @@ class TimelineWidget : public TimeBasedWidget
 {
   Q_OBJECT
 public:
+  static constexpr double kDefaultTimelineScale = 90.0;
+
   TimelineWidget(QWidget* parent = nullptr);
 
   virtual ~TimelineWidget() override;

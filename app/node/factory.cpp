@@ -29,6 +29,7 @@
 #include "block/subtitle/subtitle.h"
 #include "block/transition/crossdissolve/crossdissolvetransition.h"
 #include "block/transition/diptocolor/diptocolortransition.h"
+#include "color/colorize/colorizenode.h"
 #include "color/displaytransform/displaytransform.h"
 #include "color/ociogradingtransformlinear/ociogradingtransformlinear.h"
 #include "distort/cornerpin/cornerpindistortnode.h"
@@ -309,6 +310,8 @@ Node *NodeFactory::CreateFromFactoryIndex(const NodeFactory::InternalID &id)
     return new RippleDistortNode();
   case kMulticamNode:
     return new MultiCamNode();
+  case kColorizeNode:
+    return new ColorizeNode();
 
   case kInternalNodeCount:
     break;

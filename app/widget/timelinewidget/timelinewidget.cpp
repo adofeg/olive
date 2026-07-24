@@ -169,8 +169,7 @@ TimelineWidget::TimelineWidget(QWidget *parent) :
   view_splitter_->setCollapsible(Track::kAudio, false);
   view_splitter_->setCollapsible(Track::kSubtitle, true);
 
-  // FIXME: Magic number
-  SetScale(90.0);
+  SetScale(kDefaultTimelineScale);
 
   SetAutoSetTimebase(false);
 

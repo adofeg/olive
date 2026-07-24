@@ -76,10 +76,7 @@ OCIOGradingTransformLinearNode::OCIOGradingTransformLinearNode()
   SetInputProperty(kClampWhiteInput, QStringLiteral("enabled"), GetStandardValue(kClampWhiteEnableInput).toBool());
   SetInputProperty(kClampWhiteInput, QStringLiteral("base"), 0.01);
 
-  // FIXME: Temporarily disabled. This will break if "clamp black" is keyframed or connected to
-  //        something and there's currently no solution to remedy that. If there is in the future,
-  //        we can look into re-enabling this.
-  //SetInputProperty(kClampWhiteInput, QStringLiteral("min"), GetStandardValue(kClampBlackInput).toDouble() + 0.000001);
+  SetInputProperty(kClampWhiteInput, QStringLiteral("min"), 0.0);
 }
 
 QString OCIOGradingTransformLinearNode::Name() const
@@ -127,12 +124,6 @@ void OCIOGradingTransformLinearNode::InputValueChangedEvent(const QString &input
     SetInputProperty(kClampWhiteInput, QStringLiteral("enabled"), GetStandardValue(kClampWhiteEnableInput).toBool());
   } else if (input == kClampBlackEnableInput) {
     SetInputProperty(kClampBlackInput, QStringLiteral("enabled"), GetStandardValue(kClampBlackEnableInput).toBool());
-  } else if (input == kClampBlackInput) {
-    // Ensure the white clamp is always greater than the black clamp as per OCIO::GradingPrimary::validate
-    // FIXME: Temporarily disabled. This will break if "clamp black" is keyframed or connected to
-    //        something and there's currently no solution to remedy that. If there is in the future,
-    //        we can look into re-enabling this.
-    //SetInputProperty(kClampWhiteInput, QStringLiteral("min"), GetStandardValue(kClampBlackInput).toDouble() + 0.000001);
   }
 
   GenerateProcessor();
@@ -189,12 +180,23 @@ void OCIOGradingTransformLinearNode::Value(const NodeValueRow &value, const Node
       contrast[BLUE_CHANNEL] *= contrast[MASTER_CHANNEL];
       job.Insert(kContrastInput, NodeValue(NodeValue::kVec3, QVector3D(contrast[RED_CHANNEL], contrast[GREEN_CHANNEL], contrast[BLUE_CHANNEL])));
 
-      if (!value[kClampBlackEnableInput].toBool()) {
+      bool clamp_black_enabled = value[kClampBlackEnableInput].toBool();
+      bool clamp_white_enabled = value[kClampWhiteEnableInput].toBool();
+
+      if (!clamp_black_enabled) {
         job.Insert(kClampBlackInput, NodeValue(NodeValue::kFloat, OCIO::GradingPrimary::NoClampBlack()));
       }
 
-      if (!value[kClampWhiteEnableInput].toBool()) {
+      if (!clamp_white_enabled) {
         job.Insert(kClampWhiteInput, NodeValue(NodeValue::kFloat, OCIO::GradingPrimary::NoClampWhite()));
+      }
+
+      if (clamp_black_enabled && clamp_white_enabled) {
+        double black_clamp = value[kClampBlackInput].toDouble();
+        double white_clamp = value[kClampWhiteInput].toDouble();
+        if (white_clamp <= black_clamp) {
+          job.Insert(kClampWhiteInput, NodeValue(NodeValue::kFloat, black_clamp + 0.000001));
+        }
       }
 
       table->Push(NodeValue::kTexture, tex->toJob(job), this);
