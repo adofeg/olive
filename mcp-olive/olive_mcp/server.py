@@ -3,15 +3,18 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from .tools.backup import BackupManager
-from .tools.export import ExportTool
-from .tools.project import ProjectTool
 from .tools.editor import EditorTool
+from .tools.export import ExportTool
+from .tools.presets import PremierePresetImporter, CubeLutImporter
+from .tools.project import ProjectTool
 
 app = FastMCP("olive-mcp", instructions="Edit and export Olive video editor projects from CLI. Always creates backups before modifications.")
 backup_mgr = BackupManager()
 export_tool = ExportTool()
 project_tool = ProjectTool()
 editor_tool = EditorTool()
+premiere_importer = PremierePresetImporter()
+lut_importer = CubeLutImporter()
 
 
 @app.tool(description="Export a sequence from an Olive project to a video file. Creates backup first.")
@@ -117,6 +120,34 @@ def olive_edit_xml(project_path: str, operations: str) -> str:
     src = Path(project_path).resolve()
     backup_mgr.create_backup(str(src))
     return editor_tool.edit_xml(str(src), operations)
+
+
+@app.tool(description="Import a Premiere Pro .epr export preset and convert it to Olive's format.")
+def olive_import_preset(epr_path: str) -> str:
+    """Convert a Premiere Pro .epr export preset to an Olive export preset XML file.
+    The preset will be saved to Olive's exportpresets directory and will appear
+    in the Export dialog's preset dropdown."""
+    return premiere_importer.import_epr(epr_path)
+
+
+@app.tool(description="Inspect a .cube 3D LUT file and show how to use it in Olive.")
+def olive_import_lut(cube_path: str) -> str:
+    """Read a .cube 3D LUT file and display its metadata (size, title, domain).
+    Explains how to use it with Olive's OCIO color management pipeline."""
+    return lut_importer.import_cube(cube_path)
+
+
+@app.tool(description="Batch import multiple Premiere .epr presets at once.")
+def olive_import_presets_batch(epr_dir: str) -> str:
+    """Import all .epr files from a directory as Olive export presets."""
+    d = Path(epr_dir).resolve()
+    if not d.is_dir():
+        return f"Directory not found: {d}"
+    results = []
+    for f in sorted(d.glob("*.epr")):
+        r = premiere_importer.import_epr(str(f))
+        results.append(r.split("\n")[0])
+    return "\n".join(results) + f"\n\nConverted {len(results)} presets."
 
 
 @app.tool(description="Restore a project from a backup file path to its original location.")
