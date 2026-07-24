@@ -166,6 +166,8 @@ class EditorTool:
         ]
 
     def edit(self, project_path: str, instructions: str) -> str:
+        if len(instructions) > 10000:
+            return "=== Olive Edit ===\n  ERROR: Instructions too long (max 10000 chars)"
         proj = OveProject()
         proj.load(project_path)
         log = []

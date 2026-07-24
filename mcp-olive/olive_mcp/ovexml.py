@@ -97,18 +97,24 @@ class OveInput:
         self.input_id = input_id
         self.value = value
         self.keyframing = keyframing
+        self._custom_children: list[ET.Element] = []
 
     def to_xml(self) -> ET.Element:
         inp = ET.Element("input", id=self.input_id)
         primary = ET.SubElement(inp, "primary")
         ET.SubElement(primary, "keyframing").text = str(self.keyframing)
         std = ET.SubElement(primary, "standard")
-        t = ET.SubElement(std, "track")
-        if self.value:
-            t.text = self.value
+        if self._custom_children:
+            for child in self._custom_children:
+                std.append(child)
+        else:
+            t = ET.SubElement(std, "track")
+            if self.value:
+                t.text = self.value
         return inp
 
     def _make_primary_with_child(self, child: ET.Element) -> ET.Element:
+        self._custom_children.append(child)
         primary = ET.Element("primary")
         ET.SubElement(primary, "keyframing").text = str(self.keyframing)
         std = ET.SubElement(primary, "standard")
@@ -348,7 +354,12 @@ class OveProject:
             f.write(self.to_string())
 
     def load(self, path: str):
-        tree = ET.parse(path)
+        src = Path(path)
+        data = src.read_bytes()
+        if data[:4] == b"OVEC":
+            import zlib
+            data = zlib.decompress(data[4:])
+        tree = ET.ElementTree(ET.fromstring(data))
         root = tree.getroot()
         self.nodes.clear()
         proj = root.find("project")

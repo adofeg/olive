@@ -5,10 +5,19 @@ from xml.etree import ElementTree
 
 
 class ExportTool:
-    def __init__(self, olive_binary: str | None = None):
-        self.olive_binary = olive_binary or self._find_olive()
+    _cached_binary: str | None = None
 
-    def _find_olive(self) -> str:
+    def __init__(self, olive_binary: str | None = None):
+        self.olive_binary = olive_binary or ExportTool._find_olive_cached()
+
+    @classmethod
+    def _find_olive_cached(cls) -> str:
+        if cls._cached_binary is not None:
+            return cls._cached_binary
+        env_bin = __import__("os").environ.get("OLIVE_BINARY")
+        if env_bin:
+            cls._cached_binary = env_bin
+            return env_bin
         candidates = [
             "olive-editor",
             "olive",
@@ -18,10 +27,12 @@ class ExportTool:
         for c in candidates:
             try:
                 subprocess.run([c, "--version"], capture_output=True, timeout=5)
+                cls._cached_binary = c
                 return c
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 continue
-        return "olive-editor"
+        cls._cached_binary = "olive-editor"
+        return cls._cached_binary
 
     def export(
         self,

@@ -21,15 +21,29 @@ class ProjectTool:
             clips = []
             tracks = []
             effects = []
+            resolution_map: dict[int, str] = {}
+
+            try:
+                raw_tree = __import__("xml.etree.ElementTree", fromlist=["ElementTree"]).ElementTree.parse(str(src))
+                for raw_node in raw_tree.findall(".//node"):
+                    rptr = int(raw_node.get("ptr", "0"))
+                    for inp in raw_node.findall("input"):
+                        if inp.get("id") == "video_params":
+                            for sv in inp.iter("standard_value"):
+                                w = sv.get("width", "?")
+                                h = sv.get("height", "?")
+                                resolution_map[rptr] = f"{w}x{h}"
+            except Exception:
+                pass
 
             for ptr, node in proj.nodes.items():
                 name = node.name or "(unnamed)"
 
                 if "sequence" in node.node_id:
+                    res = resolution_map.get(ptr, "?x?")
                     seq_info = [f"  Sequence: {name} (ptr={ptr})"]
-                    vp = node.inputs.get("video_params")
-                    w = getattr(vp, 'value', "")
-                    h = getattr(vp, 'value', "")
+                    if res != "?x?":
+                        seq_info.append(f"    Resolution: {res}")
                     for c in node.connections:
                         if c.input_id == "tex_in":
                             target = proj.get_node(c.target_ptr)
@@ -91,6 +105,13 @@ class ProjectTool:
         sequence_name: str = "Sequence 1",
         media_files: list[str] | None = None,
     ) -> str:
+        width = max(16, min(width, 7680))
+        height = max(16, min(height, 4320))
+        fps_numerator = max(1, fps_numerator)
+        fps_denominator = max(1, fps_denominator)
+        if fps_numerator > 240:
+            fps_numerator = 240
+
         dst = Path(output_path).resolve()
         dst.parent.mkdir(parents=True, exist_ok=True)
 

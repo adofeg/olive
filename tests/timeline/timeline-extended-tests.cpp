@@ -33,10 +33,10 @@
 namespace olive {
 
 #define TIMELINE_TEST_START \
-  ColorManager::SetUpDefaultConfig(); \
   Project project; \
   Sequence sequence; \
-  sequence.setParent(&project)
+  sequence.setParent(&project); \
+  ColorManager::SetUpDefaultConfig()
 
 OLIVE_ADD_TEST(EffectOnClip) {
   TIMELINE_TEST_START;
