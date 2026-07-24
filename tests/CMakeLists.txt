@@ -71,4 +71,6 @@ endfunction()
 
 add_subdirectory(compositing)
 add_subdirectory(general)
+add_subdirectory(math)
+add_subdirectory(node)
 add_subdirectory(timeline)
