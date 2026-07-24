@@ -25,10 +25,24 @@ _NODE_IDS = {
 
 class _Ptr:
     _next = 1000
+    _reserved: set[int] = set()
+
+    @classmethod
+    def reset(cls):
+        cls._next = 1000
+        cls._reserved.clear()
+
+    @classmethod
+    def reserve(cls, ptr: int):
+        cls._reserved.add(ptr)
+        if ptr >= cls._next:
+            cls._next = ptr + 1
 
     @classmethod
     def next(cls) -> int:
         cls._next += 1
+        while cls._next in cls._reserved:
+            cls._next += 1
         return cls._next
 
 
@@ -320,6 +334,8 @@ class OveProject:
         nodes_wrapper = proj.find("nodes")
         if nodes_wrapper is not None:
             for node_el in nodes_wrapper.findall("node"):
+                ptr = int(node_el.get("ptr", "0"))
+                _Ptr.reserve(ptr)
                 self._load_node(node_el)
 
     def _load_node(self, el: ET.Element):
