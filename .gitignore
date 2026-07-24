@@ -103,3 +103,8 @@ compile_flags.txt
 .env
 .env.*
 !.env.example
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
